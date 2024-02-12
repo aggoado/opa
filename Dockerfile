@@ -1,19 +1,21 @@
-FROM alpine:latest
+FROM alpine:edge
+ENV USERNAME="root" \
+    PASSWORD="123" \
+    SUDO_OK="true" \
+    AUTOLOGIN="true" \
+    TZ="America/Sao_Paulo"
 
-# Instalação de dependências
-RUN apk add --no-cache \
-    bash \
-    curl \
-    ttyd
+COPY ./entrypoint.sh /
+COPY ./skel/ /etc/skel
 
-# Copia um script para iniciar o ttyd
-COPY start.sh /start.sh
+RUN apk update && \
+    apk add --no-cache tini bash ttyd tzdata sudo nano && \
+    chmod 700 /entrypoint.sh && \
+    touch /etc/.firstrun && \
+    ln -s "/usr/share/zoneinfo/$TZ" /etc/localtime && \
+    echo $TZ > /etc/timezone 
 
-# Permissão de execução para o script
-RUN chmod +x /start.sh
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["/entrypoint.sh"]
 
-# Porta que o ttyd irá ouvir
-EXPOSE 7681
-
-# Comando para iniciar o ttyd
-CMD ["/start.sh"]
+EXPOSE 7681/tcp
