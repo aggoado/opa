@@ -1,21 +1,36 @@
-FROM alpine:edge
-ENV USERNAME="user" \
-    PASSWORD="123" \
-    SUDO_OK="true" \
-    AUTOLOGIN="true" \
-    TZ="Etc/UTC"
+FROM ubuntu:latest
 
-COPY ./entrypoint.sh /
-COPY ./skel/ /etc/skel
+ENV SIAB_USERCSS="Normal:+/etc/shellinabox/options-enabled/00+Black-on-White.css,Reverse:-/etc/shellinabox/options-enabled/00_White-On-Black.css;Colors:+/etc/shellinabox/options-enabled/01+Color-Terminal.css,Monochrome:-/etc/shellinabox/options-enabled/01_Monochrome.css" \
+    SIAB_PORT=4200 \
+    SIAB_ADDUSER=true \
+    SIAB_USER=USER \
+    SIAB_USERID=1000 \
+    SIAB_GROUP=USERS \
+    SIAB_GROUPID=1000 \
+    SIAB_PASSWORD=123 \
+    SIAB_SHELL=/bin/bash \
+    SIAB_HOME=/home/guest \
+    SIAB_SUDO=true \
+    SIAB_SSL=true \
+    SIAB_SERVICE=/:LOGIN \
+    SIAB_PKGS=none \
+    SIAB_SCRIPT=none
 
-RUN apk update && \
-    apk add --no-cache tini bash ttyd tzdata sudo nano && \
-    chmod 700 /entrypoint.sh && \
-    touch /etc/.firstrun && \
-    ln -s "/usr/share/zoneinfo/$TZ" /etc/localtime && \
-    echo $TZ > /etc/timezone 
+RUN apt-get update && apt-get install -y openssl curl openssh-client sudo shellinabox && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    ln -sf '/etc/shellinabox/options-enabled/00+Black on White.css' \
+      /etc/shellinabox/options-enabled/00+Black-on-White.css && \
+    ln -sf '/etc/shellinabox/options-enabled/00_White On Black.css' \
+      /etc/shellinabox/options-enabled/00_White-On-Black.css && \
+    ln -sf '/etc/shellinabox/options-enabled/01+Color Terminal.css' \
+      /etc/shellinabox/options-enabled/01+Color-Terminal.css
 
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["/entrypoint.sh"]
+EXPOSE 4200
 
-EXPOSE 7681/tcp
+VOLUME /etc/shellinabox /var/log/supervisor /home
+
+ADD assets/entrypoint.sh /usr/local/sbin/
+
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["shellinabox"]
