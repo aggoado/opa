@@ -1,5 +1,19 @@
-FROM alpine:3.16
-RUN apk add --no-cache lua5.3 lua-filesystem lua-lyaml lua-http
-COPY fetch-latest-releases.lua /usr/local/bin
-VOLUME /out
-ENTRYPOINT [ "/usr/local/bin/fetch-latest-releases.lua" ]
+FROM alpine:latest
+
+# Instalação de dependências
+RUN apk add --no-cache \
+    bash \
+    curl \
+    ttyd
+
+# Copia um script para iniciar o ttyd
+COPY start.sh /start.sh
+
+# Permissão de execução para o script
+RUN chmod +x /start.sh
+
+# Porta que o ttyd irá ouvir
+EXPOSE 7681
+
+# Comando para iniciar o ttyd
+CMD ["/start.sh"]
