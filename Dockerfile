@@ -1,204 +1,78 @@
-#
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
+# base stage
+FROM golang:1.20.4-alpine3.16 AS base
 
-#
-# Dockerfile for guacamole-server
-#
+ARG GOPROXY
 
-# The Alpine Linux image that should be used as the basis for the guacd image
-# NOTE: Using 3.18 because the required openssl1.1-compat-dev package was
-# removed in more recent versions.
-ARG ALPINE_BASE_IMAGE=3.18
-FROM alpine:${ALPINE_BASE_IMAGE} AS builder
+RUN apk add --update git ca-certificates build-base bash util-linux setpriv perl xz
 
-# Install build dependencies
-RUN apk add --no-cache                \
-        autoconf                      \
-        automake                      \
-        build-base                    \
-        cairo-dev                     \
-        cmake                         \
-        cunit-dev                     \
-        git                           \
-        grep                          \
-        libjpeg-turbo-dev             \
-        libpng-dev                    \
-        libtool                       \
-        libwebp-dev                   \
-        make                          \
-        openssl1.1-compat-dev         \
-        pango-dev                     \
-        pulseaudio-dev                \
-        util-linux-dev
+# We are using libxcrypt to support yescrypt password hashing method
+# Since libxcrypt package is not available in Alpine, so we need to build libxcrypt from source code
+RUN wget -q https://github.com/besser82/libxcrypt/releases/download/v4.4.27/libxcrypt-4.4.27.tar.xz && \
+    tar xvf libxcrypt-4.4.27.tar.xz && cd libxcrypt-4.4.27 && \
+    ./configure --prefix /usr && make -j$(nproc) && make install && \
+    cd .. && rm -rf libxcrypt-4.4.27*
 
-# Copy source to container for sake of build
-ARG BUILD_DIR=/tmp/guacamole-server
-COPY . ${BUILD_DIR}
+RUN ln -sf /bin/bash /bin/sh
 
-#
-# Base directory for installed build artifacts.
-#
-# NOTE: Due to limitations of the Docker image build process, this value is
-# duplicated in an ARG in the second stage of the build.
-#
-ARG PREFIX_DIR=/opt/guacamole
+WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub
 
-#
-# Automatically select the latest versions of each core protocol support
-# library (these can be overridden at build time if a specific version is
-# needed)
-#
-ARG WITH_FREERDP='2(\.\d+)+'
-ARG WITH_LIBSSH2='libssh2-\d+(\.\d+)+'
-ARG WITH_LIBTELNET='\d+(\.\d+)+'
-ARG WITH_LIBVNCCLIENT='LibVNCServer-\d+(\.\d+)+'
-ARG WITH_LIBWEBSOCKETS='v\d+(\.\d+)+'
+COPY ./go.mod ./
 
-#
-# Default build options for each core protocol support library, as well as
-# guacamole-server itself (these can be overridden at build time if different
-# options are needed)
-#
+WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub/agent
 
-ARG FREERDP_OPTS="\
-    -DBUILTIN_CHANNELS=OFF \
-    -DCHANNEL_URBDRC=OFF \
-    -DWITH_ALSA=OFF \
-    -DWITH_CAIRO=ON \
-    -DWITH_CHANNELS=ON \
-    -DWITH_CLIENT=ON \
-    -DWITH_CUPS=OFF \
-    -DWITH_DIRECTFB=OFF \
-    -DWITH_FFMPEG=OFF \
-    -DWITH_GSM=OFF \
-    -DWITH_GSSAPI=OFF \
-    -DWITH_IPP=OFF \
-    -DWITH_JPEG=ON \
-    -DWITH_LIBSYSTEMD=OFF \
-    -DWITH_MANPAGES=OFF \
-    -DWITH_OPENH264=OFF \
-    -DWITH_OPENSSL=ON \
-    -DWITH_OSS=OFF \
-    -DWITH_PCSC=OFF \
-    -DWITH_PULSE=OFF \
-    -DWITH_SERVER=OFF \
-    -DWITH_SERVER_INTERFACE=OFF \
-    -DWITH_SHADOW_MAC=OFF \
-    -DWITH_SHADOW_X11=OFF \
-    -DWITH_SSE2=ON \
-    -DWITH_WAYLAND=OFF \
-    -DWITH_X11=OFF \
-    -DWITH_X264=OFF \
-    -DWITH_XCURSOR=ON \
-    -DWITH_XEXT=ON \
-    -DWITH_XI=OFF \
-    -DWITH_XINERAMA=OFF \
-    -DWITH_XKBFILE=ON \
-    -DWITH_XRENDER=OFF \
-    -DWITH_XTEST=OFF \
-    -DWITH_XV=OFF \
-    -DWITH_ZLIB=ON"
+COPY ./agent/go.mod ./agent/go.sum ./
 
-ARG GUACAMOLE_SERVER_OPTS="\
-    --disable-guaclog"
+RUN go mod download
 
-ARG LIBSSH2_OPTS="\
-    -DBUILD_EXAMPLES=OFF \
-    -DBUILD_SHARED_LIBS=ON"
+# builder stage
+FROM base AS builder
 
-ARG LIBTELNET_OPTS="\
-    --disable-static \
-    --disable-util"
+ARG SHELLHUB_VERSION=latest
+ARG GOPROXY
 
-ARG LIBVNCCLIENT_OPTS=""
+COPY ./pkg $GOPATH/src/github.com/shellhub-io/shellhub/pkg
+COPY ./agent .
 
-ARG LIBWEBSOCKETS_OPTS="\
-    -DDISABLE_WERROR=ON \
-    -DLWS_WITHOUT_SERVER=ON \
-    -DLWS_WITHOUT_TESTAPPS=ON \
-    -DLWS_WITHOUT_TEST_CLIENT=ON \
-    -DLWS_WITHOUT_TEST_PING=ON \
-    -DLWS_WITHOUT_TEST_SERVER=ON \
-    -DLWS_WITHOUT_TEST_SERVER_EXTPOLL=ON \
-    -DLWS_WITH_STATIC=OFF"
+WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub
 
-# Build guacamole-server and its core protocol library dependencies
-RUN ${BUILD_DIR}/src/guacd-docker/bin/build-all.sh
+RUN go mod download
 
-# Record the packages of all runtime library dependencies
-RUN ${BUILD_DIR}/src/guacd-docker/bin/list-dependencies.sh \
-        ${PREFIX_DIR}/sbin/guacd               \
-        ${PREFIX_DIR}/lib/libguac-client-*.so  \
-        ${PREFIX_DIR}/lib/freerdp2/*guac*.so   \
-        > ${PREFIX_DIR}/DEPENDENCIES
+WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub/agent
 
-# Use same Alpine version as the base for the runtime image
-FROM alpine:${ALPINE_BASE_IMAGE}
+RUN go build -tags docker -ldflags "-X main.AgentVersion=${SHELLHUB_VERSION}"
 
-#
-# Base directory for installed build artifacts. See also the
-# CMD directive at the end of this build stage.
-#
-# NOTE: Due to limitations of the Docker image build process, this value is
-# duplicated in an ARG in the first stage of the build.
-#
-ARG PREFIX_DIR=/opt/guacamole
+# To avoid use $GOPATH on the `production` stage, we copy whe agent binary to /app on the root.
+COPY ./agent /app/
 
-# Runtime environment
-ENV LC_ALL=C.UTF-8
-ENV LD_LIBRARY_PATH=${PREFIX_DIR}/lib
-ENV GUACD_LOG_LEVEL=info
+# development stage
+FROM base AS development
 
-# Copy build artifacts into this stage
-COPY --from=builder ${PREFIX_DIR} ${PREFIX_DIR}
+ARG GOPROXY
+ENV GOPROXY ${GOPROXY}
 
-# Bring runtime environment up to date and install runtime dependencies
-RUN apk add --no-cache                \
-        ca-certificates               \
-        font-noto-cjk                 \
-        ghostscript                   \
-        netcat-openbsd                \
-        shadow                        \
-        terminus-font                 \
-        ttf-dejavu                    \
-        ttf-liberation                \
-        util-linux-login && \
-    xargs apk add --no-cache < ${PREFIX_DIR}/DEPENDENCIES
+RUN apk add --update openssl openssh-client
+RUN go install github.com/markbates/refresh@v1.11.1 && \
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.3
 
-# Checks the operating status every 5 minutes with a timeout of 5 seconds
-HEALTHCHECK --interval=5m --timeout=5s CMD nc -z 127.0.0.1 4822 || exit 1
+WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub
 
-# Create a new user guacd
-ARG UID=1000
-ARG GID=1000
-RUN groupadd --gid $GID guacd
-RUN useradd --system --create-home --shell /sbin/nologin --uid $UID --gid $GID guacd
+RUN go mod download
 
-# Run with user guacd
-USER guacd
+#RUN cp -a $GOPATH/src/github.com/shellhub-io/shellhub/vendor /vendor
 
-# Expose the default listener port
-EXPOSE 4822
+COPY ./agent/entrypoint-dev.sh /entrypoint.sh
 
-# Start guacd, listening on port 0.0.0.0:4822
-#
-# Note the path here MUST correspond to the value specified in the 
-# PREFIX_DIR build argument.
-#
-CMD /opt/guacamole/sbin/guacd -b 0.0.0.0 -L $GUACD_LOG_LEVEL -f
+WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub/agent
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+# production stage
+FROM alpine:3.16 AS production
+
+# Copy the libcrypt from builder stage to avoid rebuild it.
+COPY --from=builder /usr/lib/libcrypt.so.* /usr/lib/
+
+WORKDIR /app
+COPY --from=builder /app/ /app/
+
+ENTRYPOINT ./agent
