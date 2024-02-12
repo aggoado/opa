@@ -1,78 +1,81 @@
-# base stage
-FROM golang:1.20.4-alpine3.16 AS base
+############################################################
+# Dockerfile that creates a container for running Gate One.
+# Inside the container Gate One will run as the 'gateone'
+# user and will listen on port 8000.  docker run example:
+#
+#   docker run -t --name=gateone -p 443:8000 gateone
+#
+# That would run Gate One; accessible via port 443 from
+# outside the container.  It will also run in the foreground
+# with pretty-printed log output (so you can see what's
+# going on).  To run Gate One in the background:
+#
+#   docker run -d --name=gateone -p 443:8000 gateone
+#
+# You could then stop or start the container like so:
+#
+#   docker stop gateone
+#   docker start gateone
+#
+# The script that starts Gate One inside of the container
+# performs a 'git pull' and will automatically install the
+# latest code whenever it runs.  To disable this feature
+# simply pass --noupdate when running the container:
+#
+#   docker run -d --name=gateone -p 443:8000 gateone --noupdate
+#
+# Note that merely stopping & starting the container doesn't
+# pull in updates.  That will only happen if you 'docker rm'
+# the container and start it back up again.
+#
+############################################################
 
-ARG GOPROXY
+FROM ubuntu
+MAINTAINER Dan McDougall <daniel.mcdougall@liftoffsoftware.com>
 
-RUN apk add --update git ca-certificates build-base bash util-linux setpriv perl xz
+ENV GATEONE_REPO_URL https://github.com/liftoff/GateOne.git
 
-# We are using libxcrypt to support yescrypt password hashing method
-# Since libxcrypt package is not available in Alpine, so we need to build libxcrypt from source code
-RUN wget -q https://github.com/besser82/libxcrypt/releases/download/v4.4.27/libxcrypt-4.4.27.tar.xz && \
-    tar xvf libxcrypt-4.4.27.tar.xz && cd libxcrypt-4.4.27 && \
-    ./configure --prefix /usr && make -j$(nproc) && make install && \
-    cd .. && rm -rf libxcrypt-4.4.27*
+# Ensure everything is up-to-date
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update --fix-missing && apt-get -y upgrade
 
-RUN ln -sf /bin/bash /bin/sh
+# Install dependencies
+RUN apt-get -y \
+    install python-pip \
+    python-imaging \
+    python-setuptools \
+    python-mutagen \
+    python-pam \
+    python-dev \
+    git \
+    telnet \
+    openssh-client && \
+    apt-get -y clean && \
+    apt-get -q -y autoremove
+RUN pip install --upgrade futures tornado cssmin slimit psutil
 
-WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub
+# Create the necessary directories, clone the repo, and install everything
+RUN mkdir -p /gateone/logs && \
+    mkdir -p /gateone/users && \
+    mkdir -p /etc/gateone/conf.d && \
+    mkdir -p /etc/gateone/ssl && \
+    cd /gateone && \
+    git clone $GATEONE_REPO_URL && \
+    cd GateOne && \
+    python setup.py install && \
+    cp docker/update_and_run_gateone.py /usr/local/bin/update_and_run_gateone && \
+    cp docker/60docker.conf /etc/gateone/conf.d/60docker.conf
 
-COPY ./go.mod ./
+# This ensures our configuration files/dirs are created:
+RUN /usr/local/bin/gateone --configure \
+    --log_file_prefix="/gateone/logs/gateone.log"
 
-WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub/agent
+# Remove the auto-generated key/certificate so that a new one gets created the
+# first time the container is started:
+RUN rm -f /etc/gateone/ssl/key.pem && \
+    rm -f /etc/gateone/ssl/certificate.pem
+# (We don't want everyone using the same SSL key/certificate)
 
-COPY ./agent/go.mod ./agent/go.sum ./
+EXPOSE 8000
 
-RUN go mod download
-
-# builder stage
-FROM base AS builder
-
-ARG SHELLHUB_VERSION=latest
-ARG GOPROXY
-
-COPY ./pkg $GOPATH/src/github.com/shellhub-io/shellhub/pkg
-COPY ./agent .
-
-WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub
-
-RUN go mod download
-
-WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub/agent
-
-RUN go build -tags docker -ldflags "-X main.AgentVersion=${SHELLHUB_VERSION}"
-
-# To avoid use $GOPATH on the `production` stage, we copy whe agent binary to /app on the root.
-COPY ./agent /app/
-
-# development stage
-FROM base AS development
-
-ARG GOPROXY
-ENV GOPROXY ${GOPROXY}
-
-RUN apk add --update openssl openssh-client
-RUN go install github.com/markbates/refresh@v1.11.1 && \
-    go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.3
-
-WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub
-
-RUN go mod download
-
-#RUN cp -a $GOPATH/src/github.com/shellhub-io/shellhub/vendor /vendor
-
-COPY ./agent/entrypoint-dev.sh /entrypoint.sh
-
-WORKDIR $GOPATH/src/github.com/shellhub-io/shellhub/agent
-
-ENTRYPOINT ["/entrypoint.sh"]
-
-# production stage
-FROM alpine:3.16 AS production
-
-# Copy the libcrypt from builder stage to avoid rebuild it.
-COPY --from=builder /usr/lib/libcrypt.so.* /usr/lib/
-
-WORKDIR /app
-COPY --from=builder /app/ /app/
-
-ENTRYPOINT ./agent
+CMD ["/usr/local/bin/update_and_run_gateone", "--log_file_prefix=/gateone/logs/gateone.log"]
