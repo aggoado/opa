@@ -1,5 +1,20 @@
-FROM modenaf360/gotty:latest
+FROM rocker/r-ver:latest
 
-EXPOSE 8080
+LABEL org.opencontainers.image.licenses="GPL-2.0-or-later" \
+      org.opencontainers.image.source="https://github.com/rocker-org/rocker-versioned2" \
+      org.opencontainers.image.vendor="Rocker Project" \
+      org.opencontainers.image.authors="Carl Boettiger <cboettig@ropensci.org>"
 
-CMD ["gotty", "-r", "-w", "--port", "8080", "/bin/bash"]
+ENV S6_VERSION=v2.1.0.2
+ENV RSTUDIO_VERSION=daily
+ENV DEFAULT_USER=rstudio
+ENV PANDOC_VERSION=default
+ENV QUARTO_VERSION=default
+
+RUN /rocker_scripts/install_rstudio.sh
+RUN /rocker_scripts/install_pandoc.sh
+RUN /rocker_scripts/install_quarto.sh
+
+EXPOSE 8787
+
+CMD ["/init"]
