@@ -1,9 +1,9 @@
 FROM alpine:edge
-ENV USERNAME="root" \
+ENV USERNAME="user" \
     PASSWORD="123" \
     SUDO_OK="true" \
     AUTOLOGIN="true" \
-    TZ="America/Sao_Paulo"
+    TZ="Etc/UTC"
 
 COPY ./entrypoint.sh /
 COPY ./skel/ /etc/skel
