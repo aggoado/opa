@@ -1,4 +1,6 @@
-FROM apache/zeppelin:0.10.0
+FROM registry.local:5000/spark-zeppelin-demo/spark_base:latest
 
-# Expose Zeppelin port
 EXPOSE 8080
+
+WORKDIR ${ZEPPELIN_HOME}
+CMD ["bin/zeppelin.sh"]
