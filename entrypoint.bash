@@ -19,7 +19,7 @@ deno --version
 echo "# Installing sudo"
 apt update
 apt upgrade
-apt install sudo
+apt install sudo -y
 
 # Start VSCode
 echo "# Starting VSCode as $USER"
