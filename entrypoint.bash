@@ -15,6 +15,11 @@ cat /proc/sys/fs/inotify/max_user_watches
 echo "# Testing Deno version"
 deno --version
 
+# instaling sudo
+apt update
+apt upgrade
+apt install sudo
+
 # Start VSCode
 echo "# Starting VSCode as $USER"
 echo "Current user: $(whoami)"
