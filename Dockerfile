@@ -30,5 +30,5 @@ ARG PATCH_SCRIPT="\
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*"
 
 RUN echo "${PATCH_SCRIPT}"
-RUN sudo bash -c "${PATCH_SCRIPT}"; 
+RUN bash -c "${PATCH_SCRIPT}"; 
 RUN fi
