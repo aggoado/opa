@@ -15,7 +15,8 @@ cat /proc/sys/fs/inotify/max_user_watches
 echo "# Testing Deno version"
 deno --version
 
-# instaling sudo
+# Installing sudo
+echo "# Installing sudo"
 apt update
 apt upgrade
 apt install sudo
