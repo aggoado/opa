@@ -3,15 +3,13 @@
 # Licensed under the MIT License. See https://go.microsoft.com/fwlink/?linkid=2090316 for license information.
 #-------------------------------------------------------------------------------------------------------------
 
-ARG ORIGINAL_IMAGE=mcr.microsoft.com/vscode/devcontainers/javascript-node@sha256:204e54a530c14868112b2b533e9428b4737c6d6ae5304ae2b63248d33807f866
+# Fix for USN-4256-1
+
+ARG ORIGINAL_IMAGE=devcon.azurecr.io/public/vscode/devcontainers/base:0.45.1-ubuntu-18.04
 FROM ${ORIGINAL_IMAGE}
 
-ARG PACKAGE_LIST="\
-libonig-dev \
-libonig4 \
-libonig4-dbg \
-dnsmasq \
-dnsmasq-base \
-dnsmasq-utils \
-tar \
-"
+RUN apt-get update  \
+    && apt-get upgrade -y libsasl2-2 \
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/*
