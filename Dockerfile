@@ -1,33 +1,37 @@
-# Note: You can use any Debian/Ubuntu based image you want. 
-FROM mcr.microsoft.com/vscode/devcontainers/base:bullseye
+#-------------------------------------------------------------------------------------------------------------
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License. See https://go.microsoft.com/fwlink/?linkid=2090316 for license information.
+#-------------------------------------------------------------------------------------------------------------
 
-# [Option] Install zsh
-ARG INSTALL_ZSH="true"
-# [Option] Upgrade OS packages to their latest versions
-ARG UPGRADE_PACKAGES="false"
-# [Option] Enable non-root Docker access in container
-ARG ENABLE_NONROOT_DOCKER="true"
-# [Option] Use the OSS Moby CLI instead of the licensed Docker CLI
-ARG USE_MOBY="true"
-# [Option] Select CLI version
-ARG CLI_VERSION="latest"
+ARG ORIGINAL_IMAGE=mcr.microsoft.com/vscode/devcontainers/javascript-node@sha256:204e54a530c14868112b2b533e9428b4737c6d6ae5304ae2b63248d33807f866
+FROM ${ORIGINAL_IMAGE}
 
-# Enable new "BUILDKIT" mode for Docker CLI
-ENV DOCKER_BUILDKIT=1
+ARG PACKAGE_LIST="\
+libonig-dev \
+libonig4 \
+libonig4-dbg \
+dnsmasq \
+dnsmasq-base \
+dnsmasq-utils \
+tar \
+"
 
-# Install needed packages and setup non-root user. Use a separate RUN statement to add your
-# own dependencies. A user of "automatic" attempts to reuse an user ID if one already exists.
-ARG USERNAME=automatic
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-RUN apt-get update 
+# Script to iterate through the above list and update packages
+ARG PATCH_SCRIPT="\
+    export DEBIAN_FRONTEND=noninteractive \
+    && apt-get update \
+    && echo \"${PACKAGE_LIST}\" | tr ' ' '\n' | while read PKG; do \
+        echo \"(*) Checking \$PKG...\" \
+        && if [ \"\$PKG\" != '' ] && dpkg -s \$PKG >/dev/null 2>&1; then \
+            echo \"(*) Updating \$PKG...\" \
+            && apt-get install -yq --only-upgrade --no-install-recommends \$PKG; \
+        fi; \
+    done \
+    && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*"
 
-# Setting the ENTRYPOINT to docker-init.sh will configure non-root access to 
-# the Docker socket if "overrideCommand": false is set in devcontainer.json. 
-# The script will also execute CMD if you need to alter startup behaviors.
-ENTRYPOINT [ "/usr/local/share/docker-init.sh" ]
-CMD [ "sleep", "infinity" ]
-
-# [Optional] Uncomment this section to install additional OS packages.
-# RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-#     && apt-get -y install --no-install-recommends <your-package-list-here>
+RUN echo "${PATCH_SCRIPT}" \
+    && if [ "$(id -u)" -ne 0 ]; then \
+        sudo bash -c "${PATCH_SCRIPT}"; \
+    else \
+        bash -c "${PATCH_SCRIPT}"; \
+    fi
