@@ -1,4 +1,10 @@
-#!/bin/bash
+#!/bin/bash# 
+
+Installing sudo
+echo "# Installing sudo"
+apt update
+apt upgrade
+apt install sudo -y
 
 echo "##################################"
 echo "####### ENTRYPOINT.bash ##########"
@@ -15,14 +21,8 @@ cat /proc/sys/fs/inotify/max_user_watches
 echo "# Testing Deno version"
 deno --version
 
-# Installing sudo
-echo "# Installing sudo"
-apt update
-apt upgrade
-apt install sudo -y
-
 # Start VSCode
 echo "# Starting VSCode as $USER"
 echo "Current user: $(whoami)"
-echo "# Starting VSCode"
-sudo -u $USER /usr/bin/code --verbose --user-data-dir /userdata
+echo "# Starting VSCode in headless mode"
+sudo -u $USER /usr/bin/code --verbose --user-data-dir /userdata --headless
