@@ -29,6 +29,7 @@ ARG PATCH_SCRIPT="\
     done \
     && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*"
 
+RUN apt install bash
 RUN echo "${PATCH_SCRIPT}"
 RUN bash -c "${PATCH_SCRIPT}"; 
 RUN fi
