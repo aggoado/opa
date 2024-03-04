@@ -7,7 +7,15 @@ RUN apt-get update && apt-get install -y \
     git \
     build-essential \
     python3 \
-    python3-pip
+    python3-pip \
+    sudo
+
+# Crie um usuário não-root (opcional)
+RUN useradd -m -s /bin/bash umbrelos
+RUN echo "umbrelos ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Troque para o usuário não-root
+USER umbrelos
 
 # Baixe e instale o umbrelOS
 RUN curl -L https://umbrel.sh | bash
